@@ -1,14 +1,13 @@
 package api
 
 import (
-	"context"
-	"errors"
 	"livepaint/data"
 	"livepaint/models"
 	"net/http"
-	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 )
 
 type contextKey int
@@ -18,98 +17,65 @@ const (
 	tokenCookieName                   = "token"
 )
 
-type EnsureAuth struct {
-	handler http.Handler
+type AuthenticatedContext struct {
+	echo.Context
+	client *models.Client
 }
 
-func getClient(r *http.Request) (*models.Client, error) {
-	var client *models.Client
-	tokenCookie, err := r.Cookie(tokenCookieName)
-	if err != nil {
-		return nil, errors.New("Missing token.")
+func EnsureAuthenticatedClient(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		client, err := getClient(c)
+		if err != nil {
+			return err
+		}
+		return next(&AuthenticatedContext{c, client})
 	}
-	client = data.Clients[tokenCookie.Value]
+}
+
+func getClient(c echo.Context) (*models.Client, error) {
+	tokenCookie, err := c.Cookie(tokenCookieName)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "Missing token")
+	}
+	client := data.Clients[tokenCookie.Value]
 	if client == nil {
-		return nil, errors.New("User doesn't exist.")
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
 	}
 	return client, nil
-}
-
-func GetCurrentClient(ctx context.Context) *models.Client {
-	return ctx.Value(authenticatedClientKey).(*models.Client)
-}
-
-func (ea *EnsureAuth) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	client, err := getClient(r)
-	if err != nil {
-		http.Error(w, "Please sign-in", http.StatusUnauthorized)
-		return
-	}
-	ctxWithClient := context.WithValue(r.Context(), authenticatedClientKey, client)
-	rWithClient := r.Clone(ctxWithClient)
-	ea.handler.ServeHTTP(w, rWithClient)
-}
-
-func EnsureAuthDecorator() MiddlewareDecorator {
-	return func(handler http.Handler) http.Handler {
-		return &EnsureAuth{handler: handler}
-	}
 }
 
 func bakeToken() string {
 	return uuid.NewString()
 }
 
-type RegisterHandler struct {
-}
-
 type RegisterRequest struct {
-	Username string `json:"username"`
+	Username string `json:"username" validate:"required,max=32"`
 }
 
-func (r *RegisterRequest) validate() error {
-	maxUsernameLen := 32
-
-	r.Username = strings.TrimSpace(r.Username)
-	if r.Username == "" {
-		return &malformedRequest{msg: "Username cannot be empty", status: http.StatusBadRequest}
+func RegisterHandler(c echo.Context) error {
+	if client, _ := getClient(c); client != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Client already registered")
 	}
-	if len(r.Username) > maxUsernameLen {
-		return &malformedRequest{msg: "Username is too long", status: http.StatusBadRequest}
-	}
-	return nil
-}
-
-func (rh RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if client, _ := getClient(r); client != nil {
-		http.Error(w, "Client already registered", http.StatusBadRequest)
-		return
-	}
-
-	var registerRequest RegisterRequest
-	if err := decodeJSONBody(w, r, &registerRequest); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err := registerRequest.validate(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	registerRequest := new(RegisterRequest)
+	if err := bindValidate(c, registerRequest); err != nil {
+		return err
 	}
 	token := bakeToken()
 	client := data.CreateClient(token, registerRequest.Username)
-	tokenCookie := &http.Cookie{Name: tokenCookieName, Value: token}
-	http.SetCookie(w, tokenCookie)
-	writeJson(w, *client)
+	tokenCookie := new(http.Cookie)
+	tokenCookie.Name = tokenCookieName
+	tokenCookie.Value = token
+	tokenCookie.Expires = time.Now().Add(24 * time.Hour)
+	tokenCookie.HttpOnly = true
+	tokenCookie.Secure = false
+	tokenCookie.Path = "/"
+	tokenCookie.SameSite = http.SameSiteLaxMode
+	c.SetCookie(tokenCookie)
+	return c.JSON(http.StatusCreated, newJSONResponse(*client))
 }
 
-type MeHandler struct {
-}
+func MeHandler(c echo.Context) error {
+	ac := c.(*AuthenticatedContext)
 
-func (mh MeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	client, err := getClient(r)
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-	writeJson(w, *client)
+	return c.JSON(http.StatusOK, newJSONResponse(*ac.client))
 }

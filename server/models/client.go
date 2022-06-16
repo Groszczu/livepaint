@@ -5,7 +5,7 @@ import "github.com/gorilla/websocket"
 type Client struct {
 	Token    string          `json:"-"`
 	Username string          `json:"username"`
-	Room     *Room           `json:"-"`
+	Room     *Room           `json:"room"`
 	Conn     *websocket.Conn `json:"-"`
 	Send     chan []byte     `json:"-"`
 }

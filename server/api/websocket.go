@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/labstack/echo/v4"
 )
 
 var upgrader = websocket.Upgrader{
@@ -14,24 +15,25 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-type WsHandler struct {
-}
-
-func (wh WsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func WsHandler(c echo.Context) error {
 	upgrader.CheckOrigin = func(r *http.Request) bool {
 		return r.Header.Get("Origin") == "http://localhost:3000"
 	}
-	client := GetCurrentClient(r.Context())
 
-	conn, err := upgrader.Upgrade(w, r, nil)
+	ac := c.(*AuthenticatedContext)
+	client := ac.client
+
+	conn, err := upgrader.Upgrade(ac.Response(), ac.Request(), nil)
 	if err != nil {
-		log.Println(err)
-		return
+		return err
 	}
+	defer conn.Close()
+
 	client.Conn = conn
 
 	go handleRead(client)
 	go handleWrite(client)
+	return nil
 }
 
 // TODO: Add AuthConn struct and replace models.Client

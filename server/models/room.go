@@ -3,11 +3,11 @@ package models
 import "github.com/google/uuid"
 
 type Room struct {
-	Id         string
-	Clients    map[*Client]bool
-	Broadcast  chan []byte
-	Register   chan *Client
-	Unregister chan *Client
+	Id         string           `json:"id"`
+	Clients    map[*Client]bool `json:"-"`
+	Broadcast  chan []byte      `json:"-"`
+	Register   chan *Client     `json:"-"`
+	Unregister chan *Client     `json:"-"`
 }
 
 func NewRoom() *Room {

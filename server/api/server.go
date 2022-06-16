@@ -1,21 +1,28 @@
 package api
 
 import (
-	"log"
-	"net/http"
-	"os"
+	"github.com/go-playground/validator"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func ListenAndServe(addr *string) {
-	mux := http.NewServeMux()
+	e := echo.New()
+	e.Validator = &CustomValidator{validator: validator.New()}
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowCredentials: true,
+	}))
+	e.Pre(middleware.AddTrailingSlash())
+	e.Use(middleware.Logger())
 
-	mux.Handle("/ws", AllowMethodDecorator(http.MethodGet)(WsHandler{}))
-	mux.Handle("/auth/me", AllowMethodDecorator(http.MethodGet)(MeHandler{}))
-	mux.Handle("/auth/register", AllowMethodDecorator(http.MethodPost)(RegisterHandler{}))
+	e.GET("/ws/", WsHandler, EnsureAuthenticatedClient)
+	e.GET("/auth/me/", MeHandler, EnsureAuthenticatedClient)
+	e.POST("/auth/session/", RegisterHandler)
 
-	logger := log.New(os.Stdout, "server: ", log.Lshortfile)
-	wrappedMux := LoggerDecorator(logger)(mux)
+	roomsGroup := e.Group("/rooms", EnsureAuthenticatedClient)
+	roomsGroup.POST("/", CreateRoomHandler)
+	roomsGroup.POST("/:id/join/", JoinRoomHandler)
 
-	logger.Printf("Starting listener on http://%v\n", *addr)
-	logger.Fatal(http.ListenAndServe(*addr, wrappedMux))
+	e.Logger.Fatal(e.Start(*addr))
 }
