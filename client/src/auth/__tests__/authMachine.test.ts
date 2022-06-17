@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest';
+import { it, expect, vi } from 'vitest';
 import { interpret } from 'xstate';
 
 import type { APIResponse } from '../../api/client';
@@ -7,9 +7,10 @@ import authMachine from '../authMachine';
 import type { Client } from '../models';
 
 function getAuthService() {
+  const navigateMock = vi.fn();
   const mockGetClient = getMockService<APIResponse<Client>>();
   const mockRegister = getMockService<APIResponse<Client>>();
-  const machine = authMachine.withConfig({
+  const machine = authMachine(navigateMock).withConfig({
     services: {
       getClient: () => mockGetClient.service,
       register: () => mockRegister.service,
@@ -21,6 +22,7 @@ function getAuthService() {
     service,
     getClient: mockGetClient,
     register: mockRegister,
+    navigateMock,
   };
 }
 
@@ -33,7 +35,7 @@ it('goes to loggedIn state if fetched client successfully', async () => {
     })
     .start();
 
-  const client = { username: 'Test user1' };
+  const client = { username: 'Test user1', room: null };
   getClient.resolve({ data: client });
 
   await wait(0);
@@ -78,7 +80,7 @@ it('goes to loggedIn state if register is successful', async () => {
 
   service.send('REGISTER');
 
-  const client = { username: 'Test user1' };
+  const client = { username: 'Test user1', room: null };
   register.resolve({ data: client });
 
   await wait(0);

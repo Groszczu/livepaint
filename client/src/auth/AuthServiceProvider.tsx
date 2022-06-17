@@ -1,14 +1,14 @@
-import { CircularProgress } from '@mui/material';
 import { useInterpret, useSelector } from '@xstate/react';
 import type { PropsWithChildren, ReactNode } from 'react';
-import { useMemo, createContext, useContext } from 'react';
+import { useState, createContext, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { InterpreterFrom } from 'xstate';
 
+import FullPageLoader from '../components/FullPageLoader';
 import ContextUsedOutsideProviderError from '../utils/errors/ContextUsedOutsideProviderError';
-import authMachine from './authMachine';
+import createAuthMachine from './authMachine';
 
-export type AuthService = InterpreterFrom<typeof authMachine>;
+export type AuthService = InterpreterFrom<ReturnType<typeof createAuthMachine>>;
 
 const AuthServiceContext = createContext<AuthService | undefined>(undefined);
 
@@ -18,17 +18,11 @@ export interface AuthServiceProviderProps {
 
 function AuthServiceProvider({
   children,
-  loader = <CircularProgress />,
+  loader = <FullPageLoader />,
 }: PropsWithChildren<AuthServiceProviderProps>) {
   const navigate = useNavigate();
-  const machine = useMemo(
-    () =>
-      authMachine.withConfig({
-        actions: { navigateToHome: () => navigate('/', { replace: true }) },
-      }),
-    [navigate]
-  );
-  const authService = useInterpret(machine);
+  const [machine] = useState(() => createAuthMachine(navigate));
+  const authService = useInterpret(machine, { devTools: import.meta.env.DEV });
   const isGettingClient = useSelector(authService, isGettingClientSelector);
 
   if (isGettingClient) {
