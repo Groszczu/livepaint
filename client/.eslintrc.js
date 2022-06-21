@@ -22,6 +22,8 @@ module.exports = {
   },
   plugins: ['react', '@typescript-eslint'],
   rules: {
+    'consistent-return': 'off',
+
     'import/no-extraneous-dependencies': [
       'error',
       {
@@ -52,7 +54,7 @@ module.exports = {
 
     '@typescript-eslint/consistent-type-imports': [
       'error',
-      { prefer: 'type-imports' },
+      { prefer: 'type-imports', disallowTypeAnnotations: false },
     ],
     '@typescript-eslint/no-use-before-define': 'off',
   },

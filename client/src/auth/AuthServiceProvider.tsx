@@ -6,9 +6,10 @@ import type { InterpreterFrom } from 'xstate';
 
 import FullPageLoader from '../components/FullPageLoader';
 import ContextUsedOutsideProviderError from '../utils/errors/ContextUsedOutsideProviderError';
+import type { AuthMachine } from './authMachine';
 import createAuthMachine from './authMachine';
 
-export type AuthService = InterpreterFrom<ReturnType<typeof createAuthMachine>>;
+export type AuthService = InterpreterFrom<AuthMachine>;
 
 const AuthServiceContext = createContext<AuthService | undefined>(undefined);
 

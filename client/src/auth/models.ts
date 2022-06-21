@@ -1,4 +1,6 @@
+import type { Room } from '../rooms/models';
+
 export interface Client {
   username: string;
-  room: { id: string } | null;
+  room: Room | null;
 }

@@ -2,21 +2,15 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { ActorRefFrom } from 'xstate';
 import { send, assign, createMachine, spawn } from 'xstate';
 
+import type { APIResponse } from '../api/client';
 import client from '../api/client';
-import type { Room } from '../rooms/models';
-import type { RoomMachineContext } from '../rooms/roomMachine';
+import type { RoomMachine, RoomMachineContext } from '../rooms/roomMachine';
 import createRoomMachine from '../rooms/roomMachine';
 import type { Client } from './models';
 
-type PartialNullable<T> = { [key in keyof T]: T[key] | null };
-interface ClientWithRefs extends Omit<Client, 'room'> {
-  room: {
-    ref: ActorRefFrom<ReturnType<typeof createRoomMachine>>;
-  } & PartialNullable<Room>;
-}
-
 export interface AuthMachineContext {
-  client: ClientWithRefs | null;
+  client: Client | null;
+  roomRef: ActorRefFrom<RoomMachine> | null;
   error: string | null;
 }
 
@@ -24,19 +18,7 @@ export type AuthMachineEvent =
   | { type: 'GET_CLIENT' }
   | { type: 'REGISTER'; username: string };
 
-export type AuthMachineTypestate =
-  | {
-      value: 'idle' | 'gettingClient' | 'loggedOut.registering';
-      context: AuthMachineContext & { user: null; error: null };
-    }
-  | {
-      value: 'loggedOut.idle';
-      context: AuthMachineContext & { user: null; error: null | string };
-    }
-  | {
-      value: 'loggedIn';
-      context: AuthMachineContext & { user: Client; error: null };
-    };
+export type AuthMachine = ReturnType<typeof createAuthMachine>;
 
 const createAuthMachine = (navigate: NavigateFunction) => {
   const navigateActions = {
@@ -44,15 +26,24 @@ const createAuthMachine = (navigate: NavigateFunction) => {
     navigateToRoom: (context: RoomMachineContext) =>
       navigate(`/room/${context.roomId}`),
   };
-  return createMachine<
-    AuthMachineContext,
-    AuthMachineEvent,
-    AuthMachineTypestate
-  >(
+  return createMachine(
     {
+      tsTypes: {} as import('./authMachine.typegen').Typegen0,
+      schema: {
+        context: {} as AuthMachineContext,
+        events: {} as AuthMachineEvent,
+        services: {} as {
+          getClient: {
+            data: APIResponse<Client>;
+          };
+          register: {
+            data: APIResponse<Client>;
+          };
+        },
+      },
       id: 'auth',
       initial: 'gettingClient',
-      context: { client: null, error: null },
+      context: { client: null, roomRef: null, error: null },
       states: {
         gettingClient: {
           invoke: {
@@ -60,9 +51,7 @@ const createAuthMachine = (navigate: NavigateFunction) => {
             src: 'getClient',
             onDone: {
               target: 'loggedIn',
-              actions: assign({
-                client: (_context, event) => event.data.data,
-              }),
+              actions: 'assignClientFromResponse',
             },
             onError: {
               target: 'loggedOut',
@@ -85,17 +74,11 @@ const createAuthMachine = (navigate: NavigateFunction) => {
                 src: 'register',
                 onDone: {
                   target: '#auth.loggedIn',
-                  actions: [
-                    assign({
-                      client: (_context, event) => event.data.data,
-                    }),
-                  ],
+                  actions: 'assignClientFromResponse',
                 },
                 onError: {
                   target: 'failure',
-                  actions: assign({
-                    error: (_context, event) => event.data.message,
-                  }),
+                  actions: 'assignErrorFromResponse',
                 },
               },
             },
@@ -109,45 +92,40 @@ const createAuthMachine = (navigate: NavigateFunction) => {
         },
 
         loggedIn: {
-          entry: [
-            assign<AuthMachineContext, AuthMachineEvent>({
-              error: null,
-              client: (context) =>
-                context.client
-                  ? {
-                      ...context.client,
-                      room: {
-                        ...context.client?.room,
-                        ref: spawn(
-                          createRoomMachine(
-                            context.client?.room?.id ?? null
-                          ).withConfig({ actions: navigateActions }),
-                          'room'
-                        ),
-                      },
-                    }
-                  : null,
-            }),
-            send(
-              (context) => ({
-                type: 'JOIN_ROOM',
-                roomId: context.client?.room.id ?? null,
-              }),
-              { to: 'room' }
-            ),
-          ],
+          entry: ['spawnRoomActor', 'sendInitRoomEvent'],
         },
       },
     },
     {
       services: {
         getClient: () => client<Client>('auth/me/'),
-        register: (_context, event) => {
-          if (event.type !== 'REGISTER') throw Error('Invalid event type');
-          return client<Client>('auth/session/', {
+        register: (_context, event) =>
+          client<Client>('auth/session/', {
             data: { username: event.username },
-          });
-        },
+          }),
+      },
+      actions: {
+        assignClientFromResponse: assign((_context, event) => ({
+          error: null,
+          client: event.data.data,
+        })),
+        assignErrorFromResponse: assign((_context, event) => ({
+          error: (event.data as Error).message,
+        })),
+        spawnRoomActor: assign((context) => ({
+          roomRef: spawn(
+            createRoomMachine(context.client?.room?.id ?? null).withConfig({
+              actions: navigateActions,
+            }),
+            'room'
+          ),
+        })),
+        sendInitRoomEvent: send(
+          {
+            type: 'INIT',
+          },
+          { to: 'room' }
+        ),
       },
     }
   );

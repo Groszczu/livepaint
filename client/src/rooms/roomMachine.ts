@@ -1,63 +1,62 @@
 import { assign, createMachine } from 'xstate';
 
+import type { APIResponse } from '../api/client';
 import client from '../api/client';
+import { createWebSocket } from '../api/websocket';
 import type { Room } from './models';
 
 export interface RoomMachineContext {
   roomId: string | null;
   error: string | null;
+  ws: WebSocket | null;
 }
 
 export type RoomMachineEvent =
-  | { type: 'JOIN_ROOM'; roomId: string | null }
+  | { type: 'INIT' }
+  | { type: 'JOIN_ROOM'; roomId: string }
   | { type: 'CREATE_ROOM' };
 
-export type RoomMachineTypestate =
-  | {
-      value: 'idle';
-      context: RoomMachineContext & { room: null; error: null };
-    }
-  | {
-      value: 'creatingRoom';
-      context: RoomMachineContext & { room: null; error: null };
-    }
-  | {
-      value: 'joiningRoom';
-      context: RoomMachineContext & { room: null; error: null };
-    }
-  | {
-      value: 'joinedRoom';
-      context: RoomMachineContext & { room: Room; error: null };
-    }
-  | {
-      value: 'failedToJoinRoom';
-      context: RoomMachineContext & { room: null; error: string };
-    };
+export type RoomMachine = ReturnType<typeof createRoomMachine>;
 
 const createRoomMachine = (roomId: string | null) =>
-  createMachine<RoomMachineContext, RoomMachineEvent, RoomMachineTypestate>(
+  createMachine(
     {
+      tsTypes: {} as import('./roomMachine.typegen').Typegen0,
+      schema: {
+        context: {} as RoomMachineContext,
+        events: {} as RoomMachineEvent,
+        services: {} as {
+          joinRoom: {
+            data: APIResponse<Room>;
+          };
+          createRoom: {
+            data: APIResponse<Room>;
+          };
+          connect: {
+            data: WebSocket;
+          };
+        },
+      },
       id: 'room',
       initial: 'idle',
-      context: { roomId, error: null },
+      context: { roomId, ws: null, error: null },
       states: {
         idle: {
           on: {
-            JOIN_ROOM: [
+            INIT: [
               {
-                cond: (context) => context.roomId !== null, // already joined
-                target: 'joinedRoom',
-              },
-              {
-                cond: (_context, event) => event.roomId !== null, // will join
-                target: 'joiningRoom',
-                actions: assign({ roomId: (_context, event) => event.roomId }),
+                cond: 'alreadyJoined',
+                target: 'connecting',
               },
               {
                 target: 'idle',
                 actions: 'navigateToHome',
               },
             ],
+            JOIN_ROOM: {
+              target: 'joiningRoom',
+              actions: 'assignRoomId',
+            },
             CREATE_ROOM: {
               target: 'creatingRoom',
             },
@@ -68,16 +67,12 @@ const createRoomMachine = (roomId: string | null) =>
             id: 'joinRoom',
             src: 'joinRoom',
             onDone: {
-              target: 'joinedRoom',
-              actions: assign({
-                roomId: (_context, event) => event.data.data.id,
-              }),
+              target: 'connecting',
+              actions: 'assignRoomIdFromResponse',
             },
             onError: {
               target: 'failedToJoinRoom',
-              actions: assign({
-                error: (_context, event) => event.data.message,
-              }),
+              actions: 'assignErrorFromResponse',
             },
           },
         },
@@ -86,16 +81,26 @@ const createRoomMachine = (roomId: string | null) =>
             id: 'createRoom',
             src: 'createRoom',
             onDone: {
-              target: 'joinedRoom',
-              actions: assign({
-                roomId: (_context, event) => event.data.data.id,
-              }),
+              target: 'connecting',
+              actions: 'assignRoomIdFromResponse',
             },
             onError: {
               target: 'failedToJoinRoom',
-              actions: assign({
-                error: (_context, event) => event.data.message,
-              }),
+              actions: 'assignErrorFromResponse',
+            },
+          },
+        },
+        connecting: {
+          invoke: {
+            id: 'connect',
+            src: 'connect',
+            onDone: {
+              target: 'joinedRoom',
+              actions: 'assignConnection',
+            },
+            onError: {
+              target: 'failedToJoinRoom',
+              actions: 'assignErrorFromResponse',
             },
           },
         },
@@ -105,7 +110,7 @@ const createRoomMachine = (roomId: string | null) =>
           on: {
             JOIN_ROOM: {
               target: 'joiningRoom',
-              actions: assign({ roomId: (_context, event) => event.roomId }),
+              actions: 'assignRoomId',
             },
             CREATE_ROOM: {
               target: 'creatingRoom',
@@ -119,6 +124,22 @@ const createRoomMachine = (roomId: string | null) =>
         joinRoom: (context) =>
           client<Room>(`rooms/${context.roomId}/join/`, { method: 'POST' }),
         createRoom: () => client<Room>(`rooms/`, { method: 'POST' }),
+        connect: () => (console.log('connecting...'), createWebSocket()),
+      },
+      actions: {
+        assignRoomId: assign((_context, event) => ({
+          roomId: event.roomId,
+        })),
+        assignRoomIdFromResponse: assign((_context, event) => ({
+          roomId: event.data.data.id,
+        })),
+        assignConnection: assign((_context, data) => ({ ws: data.data })),
+        assignErrorFromResponse: assign((_context, event) => ({
+          error: (event.data as Error).message,
+        })),
+      },
+      guards: {
+        alreadyJoined: (context) => context.roomId !== null,
       },
     }
   );

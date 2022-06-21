@@ -10,10 +10,10 @@ import { useAuthService } from '../auth/AuthServiceProvider';
 import Logo from '../components/Logo';
 
 function roomSelector(state: AuthService['state']) {
-  if (!state.context.client?.room.ref) {
+  if (!state.context.roomRef) {
     throw new Error('Unexpected null room actor ref');
   }
-  return state.context.client?.room.ref;
+  return state.context.roomRef;
 }
 
 function HomePage() {

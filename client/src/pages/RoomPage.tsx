@@ -1,24 +1,102 @@
 import { Box, Typography } from '@mui/material';
+import { useSelector } from '@xstate/react';
 import type { PointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { StateFrom } from 'xstate';
+import { AuthService, useAuthService } from '../auth/AuthServiceProvider';
+import { RoomMachine } from '../rooms/roomMachine';
+import { bytesToShort, shortToBytes } from '../utils/binary';
+import { pointsToSvgPath } from '../utils/svg';
+
+function roomSelector(state: AuthService['state']) {
+  if (!state.context.roomRef) {
+    throw new Error('Unexpected null room actor ref');
+  }
+  return state.context.roomRef;
+}
+
+function wsSelector(state: StateFrom<RoomMachine>) {
+  return state.context.ws;
+}
+
+const drawPathMessageType = 1;
+
+interface Point {
+  x: number;
+  y: number;
+}
+interface Dimensions {
+  width: number;
+  height: number;
+}
+
+type PointerPosition = Point | null;
 
 function RoomPage() {
   const { roomId } = useParams();
+  const authService = useAuthService();
+  const roomRef = useSelector(authService, roomSelector);
+  const ws = useSelector(roomRef, wsSelector);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [pointerPosition, setPointerPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
+  const [pointerPosition, setPointerPosition] = useState<PointerPosition>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const outputImageDataDimensions = useRef<Dimensions>({ width: 0, height: 0 });
+  const outputBufferRef = useRef<Point[]>([]);
 
-  function setRelativePointerPosition(e: PointerEvent<HTMLCanvasElement>) {
+  function getRelativePointerPosition(e: PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
-    setPointerPosition({
+    return {
       x: e.clientX - (canvas?.offsetLeft ?? 0),
       y: e.clientY - (canvas?.offsetTop ?? 0),
-    });
+    };
   }
+
+  useEffect(() => {
+    if (!ws) {
+      console.log('no websocket');
+
+      return;
+    }
+    console.log('has websocket');
+    function handleMessage(e: MessageEvent) {
+      const [messageType, ...bytes] = new Uint8Array(e.data);
+      if (messageType !== drawPathMessageType) {
+        console.log('no draw message', messageType);
+
+        return;
+      }
+
+      const points: number[] = [];
+
+      const chunkSize = 4;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const [xMsb, xLsb, yMsb, yLsb] = bytes.slice(i, i + chunkSize);
+        // do whatever
+        points.push(bytesToShort([xMsb, xLsb]), bytesToShort([yMsb, yLsb]));
+      }
+
+      console.log('got points', points);
+
+      const pathToDraw = new Path2D(pointsToSvgPath(points));
+      const ctx = ctxRef.current;
+      if (!ctx) {
+        return;
+      }
+      ctx.stroke(pathToDraw);
+    }
+    function handleError(e: any) {
+      console.log(e);
+    }
+    ws.addEventListener('message', handleMessage);
+    ws.addEventListener('error', handleError);
+    console.log('added handle message');
+
+    return () => {
+      ws.removeEventListener('message', handleMessage);
+      ws.removeEventListener('error', handleError);
+    };
+  }, [ws]);
 
   useEffect(() => {
     if (!canvasRef.current) {
@@ -62,11 +140,14 @@ function RoomPage() {
       <canvas
         ref={canvasRef}
         onPointerDown={(e) => {
-          setRelativePointerPosition(e);
+          const relativePointerPosition = getRelativePointerPosition(e);
+          setPointerPosition(relativePointerPosition);
           const ctx = ctxRef.current;
           if (!ctx) {
             return;
           }
+          outputBufferRef.current.push(relativePointerPosition);
+
           ctx.strokeStyle = '#000';
           ctx.beginPath();
         }}
@@ -76,17 +157,35 @@ function RoomPage() {
           if (!ctx || !canvas || !roomId) {
             return;
           }
+          if (ws && outputBufferRef.current.length !== 0) {
+            console.log('sending points', outputBufferRef.current);
+            const bytes = [
+              drawPathMessageType,
+              ...outputBufferRef.current.flatMap((point) => [
+                ...shortToBytes(point.x),
+                ...shortToBytes(point.y),
+              ]),
+            ];
+
+            const message = new Uint8Array(bytes);
+
+            ws.send(message);
+
+            outputBufferRef.current = [];
+          }
           localStorage.setItem(roomId, canvas.toDataURL());
           setPointerPosition(null);
         }}
         onPointerMove={(e) => {
           const ctx = ctxRef.current;
-          if (!ctx || !pointerPosition) {
+          if (!ctx || !pointerPosition || !ws) {
             return;
           }
-          setRelativePointerPosition(e);
+          setPointerPosition(getRelativePointerPosition(e));
           ctx.lineTo(pointerPosition.x, pointerPosition.y);
           ctx.stroke();
+
+          outputBufferRef.current.push(pointerPosition);
         }}
       />
     </Box>

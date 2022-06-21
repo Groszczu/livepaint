@@ -2,7 +2,6 @@ package api
 
 import (
 	"livepaint/models"
-	"log"
 	"net/http"
 	"time"
 
@@ -27,33 +26,33 @@ func WsHandler(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
 
 	client.Conn = conn
 
-	go handleRead(client)
-	go handleWrite(client)
+	go handleRead(ac, client)
+	go handleWrite(ac, client)
 	return nil
 }
 
 // TODO: Add AuthConn struct and replace models.Client
-func handleRead(client *models.Client) {
-	defer client.Conn.Close()
+func handleRead(ac *AuthenticatedContext, client *models.Client) {
+	conn := client.Conn
+	defer conn.Close()
 
-	client.Conn.SetReadLimit(MaxMessageSize)
-	client.Conn.SetReadDeadline(time.Now().Add(PongWait))
-	client.Conn.SetPongHandler(func(string) error { client.Conn.SetReadDeadline(time.Now().Add(PongWait)); return nil })
+	conn.SetReadLimit(MaxMessageSize)
+	conn.SetReadDeadline(time.Now().Add(PongWait))
+	conn.SetPongHandler(func(string) error { conn.SetReadDeadline(time.Now().Add(PongWait)); return nil })
 	for {
 		_, buffer, err := client.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Println(err)
+				ac.Logger().Error(err)
 			}
 			break
 		}
 		msg, err := unmarshal(buffer)
 		if err != nil {
-			log.Println(err)
+			ac.Logger().Error(err)
 		} else {
 			msg.process(client)
 		}
@@ -61,7 +60,7 @@ func handleRead(client *models.Client) {
 }
 
 // TODO: Add AuthConn struct and replace models.Client
-func handleWrite(client *models.Client) {
+func handleWrite(ac *AuthenticatedContext, client *models.Client) {
 	ticker := time.NewTicker(PingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -81,6 +80,7 @@ func handleWrite(client *models.Client) {
 			if err != nil {
 				return
 			}
+			ac.Logger().Debug("Sending message")
 			w.Write(outMsg)
 
 			if err := w.Close(); err != nil {
