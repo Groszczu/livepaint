@@ -67,7 +67,7 @@ func RegisterHandler(c echo.Context) error {
 	tokenCookie.Value = token
 	tokenCookie.Expires = time.Now().Add(24 * time.Hour)
 	tokenCookie.HttpOnly = true
-	tokenCookie.Secure = false
+	tokenCookie.Secure = true
 	tokenCookie.Path = "/"
 	tokenCookie.Domain = "livepaintapp.azurewebsites.net"
 	tokenCookie.SameSite = http.SameSiteLaxMode
