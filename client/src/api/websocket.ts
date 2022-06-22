@@ -1,18 +1,22 @@
+import type { RGBColor } from '../utils/drawing';
+import type { Point } from '../utils/point';
+import { pointsToBytes } from '../utils/point';
 import { API_WS_URL } from './config';
 
-// eslint-disable-next-line import/prefer-default-export
+type WSMessage = 'DRAW_PATH';
+
+export const WS_MESSAGE_TYPES: Record<WSMessage, number> = {
+  DRAW_PATH: 1,
+} as const;
+
 export function createWebSocket() {
-  console.log('will create promise');
   return new Promise<WebSocket>((resolve, reject) => {
     const ws = new WebSocket(API_WS_URL);
     ws.binaryType = 'arraybuffer';
 
-    console.log('adding ws listeners');
     ws.addEventListener(
       'open',
       () => {
-        console.log('resolving ws conn');
-
         resolve(ws);
       },
       { once: true }
@@ -26,3 +30,12 @@ export function createWebSocket() {
     );
   });
 }
+
+export const messageSerializer = {
+  DRAW_PATH: (points: Point[], color: RGBColor) =>
+    new Uint8Array([
+      WS_MESSAGE_TYPES.DRAW_PATH,
+      ...color,
+      ...pointsToBytes(points),
+    ]),
+} as const;

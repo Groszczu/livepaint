@@ -6,6 +6,8 @@ import type { APIResponse } from '../api/client';
 import client from '../api/client';
 import type { RoomMachine, RoomMachineContext } from '../rooms/roomMachine';
 import createRoomMachine from '../rooms/roomMachine';
+import type { RGBColor } from '../utils/drawing';
+import { hashStringToRGB } from '../utils/hash';
 import type { Client } from './models';
 
 export interface AuthMachineContext {
@@ -114,7 +116,12 @@ const createAuthMachine = (navigate: NavigateFunction) => {
         })),
         spawnRoomActor: assign((context) => ({
           roomRef: spawn(
-            createRoomMachine(context.client?.room?.id ?? null).withConfig({
+            createRoomMachine(
+              context.client?.room?.id ?? null,
+              context.client
+                ? hashStringToRGB(context.client.username)
+                : ([0, 0, 0] as RGBColor)
+            ).withConfig({
               actions: navigateActions,
             }),
             'room'
