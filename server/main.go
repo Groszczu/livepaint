@@ -5,8 +5,10 @@ import (
 	"livepaint/api"
 )
 
-var addr = flag.String("addr", "localhost:8080", "http service address")
+var port = flag.String("port", "8080", "http service port")
 
 func main() {
-	api.ListenAndServe(addr)
+	flag.Parse()
+
+	api.ListenAndServe(port)
 }

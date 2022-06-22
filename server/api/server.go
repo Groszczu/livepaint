@@ -6,11 +6,11 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
-func ListenAndServe(addr *string) {
+func ListenAndServe(port *string) {
 	e := echo.New()
 	e.Validator = &CustomValidator{validator: validator.New()}
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"https://livepaint.vercel.app"},
 		AllowCredentials: true,
 	}))
 	e.Pre(middleware.AddTrailingSlash())
@@ -25,5 +25,5 @@ func ListenAndServe(addr *string) {
 	roomsGroup.POST("/:id/join/", JoinRoomHandler)
 	roomsGroup.DELETE("/:id/leave/", LeaveRoomHandler)
 
-	e.Logger.Fatal(e.Start(*addr))
+	e.Logger.Fatal(e.Start(":" + *port))
 }
