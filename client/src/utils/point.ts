@@ -1,8 +1,25 @@
 import { bytesToShort, shortToBytes } from './binary';
+import type { Dimensions } from './drawing';
 
 export interface Point {
   x: number;
   y: number;
+}
+
+const NORMALIZATION_RESOLUTION = 2 ** 16 - 1;
+
+export function normalizePoint(point: Point, canvasDimensions: Dimensions) {
+  return {
+    x: (point.x / canvasDimensions.width) * NORMALIZATION_RESOLUTION,
+    y: (point.y / canvasDimensions.height) * NORMALIZATION_RESOLUTION,
+  };
+}
+
+export function denormalizePoint(point: Point, canvasDimensions: Dimensions) {
+  return {
+    x: (point.x * canvasDimensions.width) / NORMALIZATION_RESOLUTION,
+    y: (point.y * canvasDimensions.height) / NORMALIZATION_RESOLUTION,
+  };
 }
 
 export function pointToCoords(point: Point) {

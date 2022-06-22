@@ -23,6 +23,7 @@ func ListenAndServe(addr *string) {
 	roomsGroup := e.Group("/rooms", EnsureAuthenticatedClient)
 	roomsGroup.POST("/", CreateRoomHandler)
 	roomsGroup.POST("/:id/join/", JoinRoomHandler)
+	roomsGroup.DELETE("/:id/leave/", LeaveRoomHandler)
 
 	e.Logger.Fatal(e.Start(*addr))
 }

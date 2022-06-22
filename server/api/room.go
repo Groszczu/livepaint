@@ -31,7 +31,6 @@ func runRoom(room *models.Room) {
 		case client := <-room.Unregister:
 			if _, ok := room.Clients[client]; ok {
 				delete(room.Clients, client)
-				// close(client.Send)
 				if len(room.Clients) == 0 {
 					delete(data.Rooms, room.Id)
 					break
@@ -42,7 +41,6 @@ func runRoom(room *models.Room) {
 				select {
 				case client.Send <- message:
 				default:
-					// close(client.Send)
 					delete(room.Clients, client)
 				}
 			}
@@ -81,7 +79,31 @@ func JoinRoomHandler(c echo.Context) error {
 	return ac.JSON(http.StatusCreated, newJSONResponse(*room))
 }
 
+type LeaveRoomRequest struct {
+	RoomID string `param:"id"`
+}
+
+func LeaveRoomHandler(c echo.Context) error {
+	ac := c.(*AuthenticatedContext)
+	client := ac.client
+
+	leaveRoomRequest := new(JoinRoomRequest)
+
+	if err := bindValidate(c, leaveRoomRequest); err != nil {
+		return err
+	}
+
+	if client.Room == nil || client.Room.Id != leaveRoomRequest.RoomID {
+		return echo.NewHTTPError(http.StatusBadRequest, "Client is not a member of this room")
+	}
+
+	leaveRoom(client)
+	client.Room = nil
+
+	return ac.NoContent(http.StatusNoContent)
+}
+
 func leaveRoom(client *models.Client) {
 	client.Room.Unregister <- client
-	close(client.Send)
+	// close(client.Send)
 }

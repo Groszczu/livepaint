@@ -1,5 +1,5 @@
 import { ContentCopy } from '@mui/icons-material';
-import { Box, IconButton, Stack, Typography } from '@mui/material';
+import { Box, Button, IconButton, Stack, Typography } from '@mui/material';
 import { useSelector } from '@xstate/react';
 import type { PointerEvent } from 'react';
 import { useEffect, useRef } from 'react';
@@ -31,9 +31,12 @@ function RoomPage() {
 
   function getRelativePointerPosition(e: PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
+    if (!canvas) {
+      throw new Error('Canvas not initialized before drawing');
+    }
     return {
-      x: e.clientX - (canvas?.offsetLeft ?? 0),
-      y: e.clientY - (canvas?.offsetTop ?? 0),
+      x: e.clientX - canvas.offsetLeft,
+      y: e.clientY - canvas.offsetTop,
     };
   }
 
@@ -61,13 +64,13 @@ function RoomPage() {
   }, [roomRef, ws]);
 
   useEffect(() => {
-    if (!canvasRef.current) {
+    if (!canvasRef.current || !roomId) {
       return;
     }
 
     const canvas = canvasRef.current;
-    canvas.width = document.body.clientWidth;
-    canvas.height = document.body.clientHeight * 0.8;
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
     const ctx = canvasRef.current.getContext('2d');
 
     if (!ctx) {
@@ -83,32 +86,7 @@ function RoomPage() {
         });
       }
     });
-
-    // if (!roomId) {
-    //   return () => {
-    //     subscription.unsubscribe();
-    //   };
-    // }
-
-    // const persistedImageURL = localStorage.getItem(roomId);
-
-    // if (!persistedImageURL) {
-    //   return () => {
-    //     subscription.unsubscribe();
-    //   };
-    // }
-    // const img = new Image();
-    // img.onload = () => {
-    //   canvas.width = img.width;
-    //   canvas.height = img.height;
-    //   ctx.drawImage(img, 0, 0);
-    // };
-
-    // img.src = persistedImageURL;
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, [roomId, roomRef]);
 
   return (
@@ -118,15 +96,32 @@ function RoomPage() {
       display="flex"
       flexDirection="column"
       alignItems="center"
+      padding={2}
     >
-      <Stack direction="row" gap={1} sx={{ alignItems: 'center' }}>
+      <Stack
+        direction="row"
+        gap={1}
+        justifyContent="center"
+        alignItems="center"
+        width="100%"
+        marginBottom={2}
+      >
         <Typography variant="h5">Room: {roomId}</Typography>
         <IconButton onClick={() => navigator.clipboard.writeText(roomId ?? '')}>
           <ContentCopy />
         </IconButton>
+        <Button
+          color="warning"
+          variant="outlined"
+          onClick={() => roomRef.send('LEAVE_ROOM')}
+          sx={{ marginLeft: 'auto' }}
+        >
+          Leave
+        </Button>
       </Stack>
       <canvas
         ref={canvasRef}
+        style={{ border: '1px solid black', width: '100%', flex: 1 }}
         onPointerDown={(e) => {
           roomRef.send({
             type: 'START_DRAWING',

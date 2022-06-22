@@ -1,6 +1,6 @@
-import type { RGBColor } from '../utils/drawing';
+import type { Dimensions, RGBColor } from '../utils/drawing';
 import type { Point } from '../utils/point';
-import { pointsToBytes } from '../utils/point';
+import { normalizePoint, pointsToBytes } from '../utils/point';
 import { API_WS_URL } from './config';
 
 type WSMessage = 'DRAW_PATH';
@@ -32,10 +32,12 @@ export function createWebSocket() {
 }
 
 export const messageSerializer = {
-  DRAW_PATH: (points: Point[], color: RGBColor) =>
+  DRAW_PATH: (points: Point[], canvasDimensions: Dimensions, color: RGBColor) =>
     new Uint8Array([
       WS_MESSAGE_TYPES.DRAW_PATH,
       ...color,
-      ...pointsToBytes(points),
+      ...pointsToBytes(
+        points.map((point) => normalizePoint(point, canvasDimensions))
+      ),
     ]),
 } as const;
