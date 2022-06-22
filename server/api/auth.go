@@ -69,6 +69,7 @@ func RegisterHandler(c echo.Context) error {
 	tokenCookie.HttpOnly = true
 	tokenCookie.Secure = false
 	tokenCookie.Path = "/"
+	tokenCookie.Domain = "livepaintapp.azurewebsites.net"
 	tokenCookie.SameSite = http.SameSiteLaxMode
 	c.SetCookie(tokenCookie)
 	return c.JSON(http.StatusCreated, newJSONResponse(*client))
