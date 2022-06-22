@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:8080';
+import { API_HTTP_URL } from './config';
 
 export interface APIResponse<T> {
   data: T;
@@ -12,7 +12,7 @@ async function client<T>(
   url: string,
   options?: RequestInit & { data?: any }
 ): Promise<APIResponse<T>> {
-  const response = await fetch(`${API_URL}/${url}`, {
+  const response = await fetch(`${API_HTTP_URL}/${url}`, {
     method: 'GET',
     credentials: 'include',
     ...(options?.data
