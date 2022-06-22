@@ -16,7 +16,7 @@ var upgrader = websocket.Upgrader{
 
 func WsHandler(c echo.Context) error {
 	upgrader.CheckOrigin = func(r *http.Request) bool {
-		return r.Header.Get("Origin") == "http://localhost:3000"
+		return r.Header.Get("Origin") == "https://livepaint.vercel.app"
 	}
 
 	ac := c.(*AuthenticatedContext)

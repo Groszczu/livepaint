@@ -14,6 +14,7 @@ func ListenAndServe(port *string) {
 		AllowCredentials: true,
 	}))
 	e.Pre(middleware.AddTrailingSlash())
+	e.Use(middleware.Recover())
 	e.Use(middleware.Logger())
 
 	e.GET("/ws/", WsHandler, EnsureAuthenticatedClient)
