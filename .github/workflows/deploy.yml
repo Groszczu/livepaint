@@ -9,11 +9,14 @@ on:
 
 jobs:
   build:
+    runs-on: ubuntu-20.04
     defaults:
       run:
         working-directory: ./client
-
-    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
 
     strategy:
       matrix:
@@ -32,6 +35,7 @@ jobs:
     - run: yarn build
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
+      if: ${{ github.ref == 'refs/heads/main' }}
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./client/dist
