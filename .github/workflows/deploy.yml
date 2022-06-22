@@ -9,8 +9,9 @@ on:
 
 jobs:
   build:
-    env:
-      working-directory: ./client
+    defaults:
+      run:
+        working-directory: ./client
 
     runs-on: ubuntu-latest
 
